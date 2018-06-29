@@ -19,7 +19,7 @@
 const bit<16> TYPE_IPV4 = 0x800;
 const bit<8> IP_PROT_UDP = 0x11;
 const bit<16> DPORT = 0x0da2;
-const bit<32> MY_AGE = 0x0000001b; // 27
+const bit<32> MY_AGE = 0x1b000000; // 27
 
 typedef bit<9>  egressSpec_t;
 typedef bit<32> ip4Addr_t;
@@ -191,10 +191,12 @@ control MyIngress(inout headers hdr,
 
     apply {
 
-        if(hdr.tupleVal.isValid()) {
-            if(hdr.ipv4.isValid() && hdr.tupleVal.age == MY_AGE) {
-                ipv4_lpm.apply();
-            }
+        if(hdr.tupleVal.isValid() && hdr.ipv4.isValid()) {
+          if(hdr.tupleVal.age == MY_AGE) {
+            ipv4_lpm.apply();
+          } else {
+            drop();
+          }
         } else if(hdr.ipv4.isValid()) {
             ipv4_lpm.apply();
         } else {
