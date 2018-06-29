@@ -8,6 +8,7 @@ import struct
 import re
 import readline
 import numpy as np
+import time
 
 from scapy.all import sendp, send, srp1, get_if_list, get_if_hwaddr
 from scapy.all import Packet, hexdump
@@ -40,27 +41,33 @@ def get_if():
 def main():
 
     if len(sys.argv)<2:
-        print 'pass 2 arguments: <destination>'
+        print 'pass 1 argument: <destination IP>'
         exit(1)
 
     addr = socket.gethostbyname(sys.argv[1])
     iface = get_if()
     print "sending on interface %s to %s" % (iface, str(addr))
-
-    tuples = np.random.randint(100, size=(10000, 3))
-    valid = 0
-    dropped = 0
-
-    s = conf.L2socket(iface=iface)
-
+    tuples = np.random.randint(100, size=(1000, 3))
+    # s = conf.L2socket(iface=iface)
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    count =0
     for t in tuples: 
         try:
-            pkt = Ether(src=get_if_hwaddr(iface), dst='00:00:00:00:01:02', type=TYPE_IPV4)
-            pkt = pkt / IP(dst=addr) / UDP(dport=DPORT, sport=random.randint(49152,65535))  
-            pkt = pkt / Tuple(age=int(t[0]), height=int(t[1]), weight=int(t[2])) / ' '
+            # pkt = Ether(src=get_if_hwaddr(iface), dst='ff:ff:ff:ff:ff:ff', type=TYPE_IPV4)
+            # pkt = pkt / IP(dst=addr) / UDP(dport=DPORT, sport=random.randint(49152,65535))  
+            # pkt = pkt / Tuple(age=int(t[0]), height=int(t[1]), weight=int(t[2]))
 
             # sendp(pkt, iface=iface, verbose=False)
-            s.send(pkt)
+            count = count + 1
+            
+           # data = struct.pack('BII', t[0],t[1],t[2])
+	    data = struct.pack('III', t[0],t[1],t[2])
+	    s.sendto(data, (addr, 3490))
+	    #s.sendto(b"hello" + str(count), (addr, 3490))
+            time.sleep(0.01)
+            print(t[0], t[1], t[2]), count
+	    #print("hello" + str(count))
+            # s.send(pkt)
 
         except Exception as error:
             print error
@@ -68,4 +75,32 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+#         print 'pass 2 arguments: <destination>'
+#         exit(1)
+
+#     addr = socket.gethostbyname(sys.argv[1])
+#     iface = get_if()
+#     print "sending on interface %s to %s" % (iface, str(addr))
+
+#     tuples = np.random.randint(100, size=(10000, 3))
+#     valid = 0
+#     dropped = 0
+
+#     s = conf.L2socket(iface=iface)
+#     s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+#     for t in tuples: 
+#         try:
+#             data=struct.pack("iii", 27, 35, 65)
+#             # sendp(pkt, iface=iface, verbose=False)
+#             s.sendto(data, ("10.0.2.2", 3490))
+
+#         except Exception as error:
+#             print error
+
+
+# if __name__ == '__main__':
+#     main()
+
 
