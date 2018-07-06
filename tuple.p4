@@ -14,12 +14,11 @@
 #include <v1model.p4>
 
 
-
-// filter all packets with age == 27
 const bit<16> TYPE_IPV4 = 0x800;
 const bit<8> IP_PROT_UDP = 0x11;
 const bit<16> DPORT = 0x0da2;
-const bit<32> MY_AGE = 0x1b000000; // 27
+const bit<32> MY_AGE = 0x0000001b; // 27
+const bit<80> MY_NAME = 0x76696B61730000000000; 
 
 typedef bit<9>  egressSpec_t;
 typedef bit<32> ip4Addr_t;
@@ -90,6 +89,7 @@ header tuple_t {
     bit<32> age;
     bit<32> height;
     bit<32> weight;
+    bit<80> name;
 }
 
 
@@ -192,7 +192,7 @@ control MyIngress(inout headers hdr,
     apply {
 
         if(hdr.tupleVal.isValid() && hdr.ipv4.isValid()) {
-          if(hdr.tupleVal.age == MY_AGE) {
+          if(hdr.tupleVal.age <= MY_AGE && hdr.tupleVal.name == MY_NAME) {
             ipv4_lpm.apply();
           } else {
             drop();
