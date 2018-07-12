@@ -240,8 +240,20 @@ control MyEgress(inout headers hdr,
                  inout metadata meta,
                  inout standard_metadata_t standard_metadata) {
    
+    // project occurs here. ipv4 and udp length fields both decrease when tuple fields/columns are removed
+    action update_headers() {
+        hdr.height.setInvalid();
+        hdr.weight.setInvalid();
+        hdr.ipv4.totalLen = hdr.ipv4.totalLen - 8;
+        hdr.udp.length_ = hdr.udp.length_ - 8;
+        hdr.udp.checksum = 0;   // udp checksum is optional. Set to 0
+    }
+
     apply { 
-       
+        if(hdr.age.isValid() && hdr.height.isValid() && 
+            hdr.weight.isValid() && hdr.name.isValid() && hdr.ipv4.isValid()) {
+            update_headers();
+        }
     }
 }
 
