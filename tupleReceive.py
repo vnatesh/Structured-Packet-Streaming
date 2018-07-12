@@ -22,8 +22,9 @@ def main():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.bind(('', DPORT))
     while True:
-        tupl, clientAddress = s.recvfrom(100)
-        tupl = struct.unpack('>III10s',tupl)
+        tupl, clientAddress = s.recvfrom(200)
+        # tupl = struct.unpack('>III10s',tupl)
+        tupl = struct.unpack('>I10s',tupl)
         print str(tupl)
         
 if __name__ == '__main__':
