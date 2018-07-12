@@ -20,6 +20,8 @@ const bit<16> DPORT = 0x0da2;
 const bit<32> MY_AGE = 0x0000001b; // 27
 const bit<80> MY_NAME = 0x76696B61730000000000; 
 
+// bit<32> new = 0x0000001b;
+
 typedef bit<9>  egressSpec_t;
 typedef bit<32> ip4Addr_t;
 typedef bit<48> macAddr_t;
@@ -163,7 +165,11 @@ control MyVerifyChecksum(inout headers hdr,
 control MyIngress(inout headers hdr,
                   inout metadata meta,
                   inout standard_metadata_t standard_metadata) {
-        
+    
+    action update_height() {
+        hdr.tupleVal.height = hdr.tupleVal.height + 10;
+    }
+
     action drop() {
         mark_to_drop();
     }
@@ -173,6 +179,7 @@ control MyIngress(inout headers hdr,
         hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
         hdr.ethernet.dstAddr = dstAddr;
         hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
+        hdr.udp.checksum = 0;
     }
             
 
@@ -184,19 +191,21 @@ control MyIngress(inout headers hdr,
             ipv4_forward;
             drop;
             NoAction;
-	}
+    }
         size = 1024;
         default_action = drop();
     }
 
     apply {
-
         if(hdr.tupleVal.isValid() && hdr.ipv4.isValid()) {
-          if(hdr.tupleVal.age <= MY_AGE && hdr.tupleVal.name == MY_NAME) {
-            ipv4_lpm.apply();
-          } else {
-            drop();
-          }
+            if(hdr.tupleVal.age <= MY_AGE && hdr.tupleVal.name == MY_NAME) {
+                update_height();
+                ipv4_lpm.apply();
+            } else {
+                drop();
+            }
+
+
         } else if(hdr.ipv4.isValid()) {
             ipv4_lpm.apply();
         } else {
@@ -223,7 +232,7 @@ control MyComputeChecksum(inout headers  hdr, inout metadata meta) {
     update_checksum(
         hdr.ipv4.isValid(),
             { hdr.ipv4.version,
-          hdr.ipv4.ihl,
+              hdr.ipv4.ihl,
               hdr.ipv4.diffserv,
               hdr.ipv4.totalLen,
               hdr.ipv4.identification,
@@ -235,6 +244,41 @@ control MyComputeChecksum(inout headers  hdr, inout metadata meta) {
               hdr.ipv4.dstAddr },
             hdr.ipv4.hdrChecksum,
             HashAlgorithm.csum16);
+
+    // update_checksum(hdr.tcp.isValid(), { hdr.ipv4.srcAddr, hdr.ipv4.dstAddr, 8w0, hdr.ipv4.protocol, meta.meta.tcpLength, hdr.tcp.srcPort, hdr.tcp.dstPort, hdr.tcp.seqNo, hdr.tcp.ackNo, hdr.tcp.dataOffset, hdr.tcp.res, hdr.tcp.flags, hdr.tcp.window, hdr.tcp.urgentPtr }, hdr.tcp.checksum, HashAlgorithm.csum16);
+    // update_checksum_with_payload(
+    //     hdr.tcp.isValid(), 
+    //         { hdr.ipv4.srcAddr, 
+    //         hdr.ipv4.dstAddr, 
+    //         8w0, 
+    //         hdr.ipv4.protocol, 
+    //         meta.meta.tcpLength, 
+    //         hdr.tcp.srcPort, 
+    //         hdr.tcp.dstPort, 
+    //         hdr.tcp.seqNo, 
+    //         hdr.tcp.ackNo, 
+    //         hdr.tcp.dataOffset, 
+    //         hdr.tcp.res, 
+    //         hdr.tcp.flags, 
+    //         hdr.tcp.window, 
+    //         hdr.tcp.urgentPtr }, 
+    //         hdr.tcp.checksum, 
+    //         HashAlgorithm.csum16);
+
+    // update_checksum(
+    //     hdr.udp.isValid(),
+    //         { hdr.udp.srcPort,
+    //         hdr.udp.dstPort,
+    //         hdr.udp.length_,
+    //         hdr.ipv4.srcAddr,
+    //         hdr.ipv4.dstAddr,
+    //         hdr.tupleVal.age,
+    //         hdr.tupleVal.height,
+    //         hdr.tupleVal.weight,
+    //         hdr.tupleVal.name},
+    //         hdr.udp.checksum,
+    //         HashAlgorithm.csum16);
+
     }
 }
 
