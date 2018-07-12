@@ -3,8 +3,8 @@
 /*
  * P4 tuple filter
  *
- * The switch receives a packet, filters the packet on 'age' colmumn, sends 
- * packet to destination host
+ * The switch receives a packet, filters the packet on 'age' colmumn, applies a project operation,
+    and sends packet to destination host
  *
  * If an unknown operation is specified or the header is not valid, the packet
  * is dropped 
@@ -20,7 +20,6 @@ const bit<16> DPORT = 0x0da2;
 const bit<32> MY_AGE = 0x0000001b; // 27
 const bit<80> MY_NAME = 0x76696B61730000000000; 
 
-// bit<32> new = 0x0000001b;
 
 typedef bit<9>  egressSpec_t;
 typedef bit<32> ip4Addr_t;
@@ -87,11 +86,20 @@ header udp_t {
  * This is a custom protocol header for the filter. We'll use 
  * ethertype 0x1234
  */
-header tuple_t {
-    bit<32> age;
-    bit<32> height;
-    bit<32> weight;
-    bit<80> name;
+header age_t {
+    bit<32> val;
+}
+
+header height_t {
+    bit<32> val;
+}
+
+header weight_t {
+    bit<32> val;
+}
+
+header name_t {
+    bit<80> val;
 }
 
 
@@ -99,7 +107,10 @@ struct headers {
     ethernet_t  ethernet;
     ipv4_t      ipv4;
     udp_t       udp;
-    tuple_t     tupleVal;
+    age_t       age;
+    height_t    height;
+    weight_t    weight;
+    name_t      name;
 }
 
  
@@ -139,16 +150,30 @@ parser MyParser(packet_in packet,
     state parse_udp {
         packet.extract(hdr.udp);
         transition select(hdr.udp.dstPort) {
-            DPORT   :   parse_tuple;
+            DPORT   :   parse_age;
             default :   accept;
         }
     }
 
-    state parse_tuple {
-        packet.extract(hdr.tupleVal);
-        transition accept;
+    state parse_age {
+        packet.extract(hdr.age);
+        transition parse_height;
     }
 
+    state parse_height {
+        packet.extract(hdr.height);
+        transition parse_weight;
+    }
+
+    state parse_weight {
+        packet.extract(hdr.weight);
+        transition parse_name;
+    }
+
+    state parse_name {
+        packet.extract(hdr.name);
+        transition accept;
+    }
 }
 
 /*************************************************************************
@@ -166,10 +191,6 @@ control MyIngress(inout headers hdr,
                   inout metadata meta,
                   inout standard_metadata_t standard_metadata) {
     
-    action update_height() {
-        hdr.tupleVal.height = hdr.tupleVal.height + 10;
-    }
-
     action drop() {
         mark_to_drop();
     }
@@ -179,7 +200,6 @@ control MyIngress(inout headers hdr,
         hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
         hdr.ethernet.dstAddr = dstAddr;
         hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
-        hdr.udp.checksum = 0;
     }
             
 
@@ -197,14 +217,13 @@ control MyIngress(inout headers hdr,
     }
 
     apply {
-        if(hdr.tupleVal.isValid() && hdr.ipv4.isValid()) {
-            if(hdr.tupleVal.age <= MY_AGE && hdr.tupleVal.name == MY_NAME) {
-                update_height();
+        if(hdr.age.isValid() && hdr.height.isValid() && 
+            hdr.weight.isValid() && hdr.name.isValid() && hdr.ipv4.isValid()) {
+            if(hdr.age.val <= MY_AGE && hdr.name.val == MY_NAME) {
                 ipv4_lpm.apply();
             } else {
                 drop();
             }
-
 
         } else if(hdr.ipv4.isValid()) {
             ipv4_lpm.apply();
@@ -220,7 +239,10 @@ control MyIngress(inout headers hdr,
 control MyEgress(inout headers hdr,
                  inout metadata meta,
                  inout standard_metadata_t standard_metadata) {
-    apply { }
+   
+    apply { 
+       
+    }
 }
 
 /*************************************************************************
@@ -290,7 +312,10 @@ control MyDeparser(packet_out packet, in headers hdr) {
         packet.emit(hdr.ethernet);
         packet.emit(hdr.ipv4);
         packet.emit(hdr.udp);
-        packet.emit(hdr.tupleVal);
+        packet.emit(hdr.age);
+        packet.emit(hdr.height);
+        packet.emit(hdr.weight);
+        packet.emit(hdr.name);
     }
 }
 
