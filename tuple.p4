@@ -5,7 +5,16 @@
  *
  * The switch receives a packet, filters the packet on 'age' colmumn, applies a project operation,
     and sends packet to destination host
- *
+    
+    example: tuples = (int age, int height, int weight, varchar 10 name)
+
+    SELECT age, name
+    FROM tuples
+    WHERE age <= 50
+    AND name = 'alice'
+
+    result = (int age, varchar 10 name)
+
  * If an unknown operation is specified or the header is not valid, the packet
  * is dropped 
  */
@@ -15,10 +24,10 @@
 
 
 const bit<16> TYPE_IPV4 = 0x800;
-const bit<8> IP_PROT_UDP = 0x11;
-const bit<16> DPORT = 0x0da2;
-const bit<32> MY_AGE = 0x0000001b; // 27
-const bit<80> MY_NAME = 0x76696B61730000000000; 
+const bit<8> IP_PROT_UDP = 0x11; 
+const bit<16> DPORT = 0x0da2; // 3490
+const bit<32> MY_AGE = 0x00000032; // 50
+const bit<80> MY_NAME = 0x616c6963650000000000; // alice
 
 
 typedef bit<9>  egressSpec_t;
@@ -86,31 +95,25 @@ header udp_t {
  * This is a custom protocol header for the filter. We'll use 
  * ethertype 0x1234
  */
-header age_t {
-    bit<32> val;
+header tuple_t {
+    bit<32> age;
+    bit<32> height;
+    bit<32> weight;
+    bit<80> name;
+
 }
 
-header height_t {
-    bit<32> val;
+header result_t {
+    bit<32> age;
+    bit<80> name;
 }
-
-header weight_t {
-    bit<32> val;
-}
-
-header name_t {
-    bit<80> val;
-}
-
 
 struct headers {
     ethernet_t  ethernet;
     ipv4_t      ipv4;
     udp_t       udp;
-    age_t       age;
-    height_t    height;
-    weight_t    weight;
-    name_t      name;
+    tuple_t     tupleVal;
+    result_t    result;
 }
 
  
@@ -150,30 +153,16 @@ parser MyParser(packet_in packet,
     state parse_udp {
         packet.extract(hdr.udp);
         transition select(hdr.udp.dstPort) {
-            DPORT   :   parse_age;
+            DPORT   :   parse_tuple;
             default :   accept;
         }
     }
 
-    state parse_age {
-        packet.extract(hdr.age);
-        transition parse_height;
-    }
-
-    state parse_height {
-        packet.extract(hdr.height);
-        transition parse_weight;
-    }
-
-    state parse_weight {
-        packet.extract(hdr.weight);
-        transition parse_name;
-    }
-
-    state parse_name {
-        packet.extract(hdr.name);
+    state parse_tuple {
+        packet.extract(hdr.tupleVal);
         transition accept;
     }
+
 }
 
 /*************************************************************************
@@ -190,7 +179,7 @@ control MyVerifyChecksum(inout headers hdr,
 control MyIngress(inout headers hdr,
                   inout metadata meta,
                   inout standard_metadata_t standard_metadata) {
-    
+
     action drop() {
         mark_to_drop();
     }
@@ -217,9 +206,8 @@ control MyIngress(inout headers hdr,
     }
 
     apply {
-        if(hdr.age.isValid() && hdr.height.isValid() && 
-            hdr.weight.isValid() && hdr.name.isValid() && hdr.ipv4.isValid()) {
-            if(hdr.age.val <= MY_AGE && hdr.name.val == MY_NAME) {
+        if(hdr.tupleVal.isValid() && hdr.ipv4.isValid()) {
+            if(hdr.tupleVal.age <= MY_AGE && hdr.tupleVal.name == MY_NAME) {
                 ipv4_lpm.apply();
             } else {
                 drop();
@@ -242,16 +230,17 @@ control MyEgress(inout headers hdr,
    
     // project occurs here. ipv4 and udp length fields both decrease when tuple fields/columns are removed
     action update_headers() {
-        hdr.height.setInvalid();
-        hdr.weight.setInvalid();
+        hdr.result.setValid();
+        hdr.result.age = hdr.tupleVal.age;
+        hdr.result.name = hdr.tupleVal.name;
+        hdr.tupleVal.setInvalid();
         hdr.ipv4.totalLen = hdr.ipv4.totalLen - 8;
         hdr.udp.length_ = hdr.udp.length_ - 8;
         hdr.udp.checksum = 0;   // udp checksum is optional. Set to 0
     }
 
     apply { 
-        if(hdr.age.isValid() && hdr.height.isValid() && 
-            hdr.weight.isValid() && hdr.name.isValid() && hdr.ipv4.isValid()) {
+        if(hdr.tupleVal.isValid() && hdr.ipv4.isValid()) {
             update_headers();
         }
     }
@@ -324,10 +313,9 @@ control MyDeparser(packet_out packet, in headers hdr) {
         packet.emit(hdr.ethernet);
         packet.emit(hdr.ipv4);
         packet.emit(hdr.udp);
-        packet.emit(hdr.age);
-        packet.emit(hdr.height);
-        packet.emit(hdr.weight);
-        packet.emit(hdr.name);
+        packet.emit(hdr.tupleVal);
+        packet.emit(hdr.result);
+
     }
 }
 
@@ -343,4 +331,3 @@ MyEgress(),
 MyComputeChecksum(),
 MyDeparser()
 ) main;
-
