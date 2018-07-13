@@ -8,12 +8,12 @@
     
     example: tuples = (int age, int height, int weight, varchar 10 name)
 
-    SELECT age, name
+    SELECT age, name, count(*)
     FROM tuples
     WHERE age <= 50
     AND name = 'alice'
 
-    result = (int age, varchar 10 name)
+    result = (int age, varchar 10 name, int count)
 
  * If an unknown operation is specified or the header is not valid, the packet
  * is dropped 
@@ -33,6 +33,11 @@ const bit<80> MY_NAME = 0x616c6963650000000000; // alice
 typedef bit<9>  egressSpec_t;
 typedef bit<32> ip4Addr_t;
 typedef bit<48> macAddr_t;
+
+// tuple/row counter...single element register array
+// registers appear to be initialized to 0 in bmv2...not sure if this will 
+// be true on a target hardware
+register<bit<32>>(1) count;
 
 /*
  * Standard ethernet header 
@@ -106,6 +111,7 @@ header tuple_t {
 header result_t {
     bit<32> age;
     bit<80> name;
+    bit<32> count;
 }
 
 struct headers {
@@ -179,6 +185,26 @@ control MyVerifyChecksum(inout headers hdr,
 control MyIngress(inout headers hdr,
                   inout metadata meta,
                   inout standard_metadata_t standard_metadata) {
+    
+
+    /*
+        v1model register specification
+
+    //size specifies the length of the register array
+    extern register<T> {
+        register(bit<32> size);
+        void read(out T result, in bit<32> index); 
+        void write(in bit<32> index, in T value);
+    }
+
+    */
+
+    // the count register is only 1 element so get index 0
+    action incrCount() {
+        bit<32> tmp;
+        count.read(tmp, 0);
+        count.write(0, tmp + 1);
+    }
 
     action drop() {
         mark_to_drop();
@@ -208,6 +234,7 @@ control MyIngress(inout headers hdr,
     apply {
         if(hdr.tupleVal.isValid() && hdr.ipv4.isValid()) {
             if(hdr.tupleVal.age <= MY_AGE && hdr.tupleVal.name == MY_NAME) {
+                incrCount();
                 ipv4_lpm.apply();
             } else {
                 drop();
@@ -233,9 +260,10 @@ control MyEgress(inout headers hdr,
         hdr.result.setValid();
         hdr.result.age = hdr.tupleVal.age;
         hdr.result.name = hdr.tupleVal.name;
+        count.read(hdr.result.count, 0); // read register count into result
         hdr.tupleVal.setInvalid();
-        hdr.ipv4.totalLen = hdr.ipv4.totalLen - 8;
-        hdr.udp.length_ = hdr.udp.length_ - 8;
+        hdr.ipv4.totalLen = hdr.ipv4.totalLen - 4;
+        hdr.udp.length_ = hdr.udp.length_ - 4;
         hdr.udp.checksum = 0;   // udp checksum is optional. Set to 0
     }
 
