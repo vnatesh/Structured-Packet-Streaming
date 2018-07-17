@@ -105,7 +105,6 @@ header tuple_t {
     bit<32> height;
     bit<32> weight;
     bit<80> name;
-
 }
 
 header result_t {
@@ -206,6 +205,10 @@ control MyIngress(inout headers hdr,
         count.write(0, tmp + 1);
     }
 
+    action resetCount() {
+        count.write(0, 1);
+    }
+
     action drop() {
         mark_to_drop();
     }
@@ -234,7 +237,14 @@ control MyIngress(inout headers hdr,
     apply {
         if(hdr.tupleVal.isValid() && hdr.ipv4.isValid()) {
             if(hdr.tupleVal.age <= MY_AGE && hdr.tupleVal.name == MY_NAME) {
-                incrCount();
+                bit<32> tmp;
+                count.read(tmp, 0);
+                if(tmp < 5) {
+                    incrCount();
+                } else {
+                    resetCount();
+                }
+
                 ipv4_lpm.apply();
             } else {
                 drop();
